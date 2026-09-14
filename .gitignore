@@ -65,3 +65,6 @@ dataset/
 
 # Prisma generated client (rebuilt by `prisma generate`)
 src/infrastructure/prisma/generated/
+
+# working drafts merged into README/SECURITY by hand, then deleted
+docs/drafts/

@@ -15,10 +15,10 @@ below).
 
 ### Stack ratings (1 never used · 2 tutorial-level · 3 shipped code with it · 4 comfortable in production · 5 could teach it)
 
-- TypeScript: _
-- Next.js: _
-- NestJS: _
-- Prisma: _
+- TypeScript: 4
+- Next.js: 3
+- NestJS: 4
+- Prisma: 4
 - PostgreSQL: _
 - WebSockets: _
 - Tailwind: _
