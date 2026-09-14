@@ -29,7 +29,9 @@ the flag inert regardless of its value. That guarantee is in code, not in config
   `/health`, restart on failure.
 - Variables per environment: `DATABASE_URL=${{Postgres.DATABASE_URL}}` (private network),
   `NODE_ENV`, `CORS_ORIGIN`, `SNAPSHOT_NOW=2026-08-25T14:30:00Z`, `API_KEY_TTL_HOURS=12`,
-  `DEV_FILLS_ENABLED=true`. `PORT` is injected by Railway.
+  `DEV_FILLS_ENABLED=true`, and the optional Socket.IO heartbeat trio `WS_PING_INTERVAL_MS`,
+  `WS_PING_TIMEOUT_MS`, `WS_CONNECT_TIMEOUT_MS` (defaults 25000 / 20000 / 45000 when unset).
+  `PORT` is injected by Railway.
 - Deployments were uploaded with `railway up --environment <env>` from a clean checkout.
   Connecting the GitHub repository for push-to-deploy requires granting the Railway GitHub
   app access to the private repository.
