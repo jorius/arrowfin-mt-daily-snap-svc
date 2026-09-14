@@ -20,11 +20,14 @@ export class PrismaApiKeysRepository implements ApiKeysRepository {
     });
   }
 
+  /** Tenant-scoped in the WHERE and by row-level security. */
   async revoke(ctx: TenantContext, apiKeyId: string, at: Date): Promise<void> {
-    await this.prisma.apiKey.updateMany({
-      where: { id: apiKeyId, brokerId: ctx.brokerId, traderId: ctx.traderId, revokedAt: null },
-      data: { revokedAt: at },
-    });
+    await this.prisma.forTenant(ctx, (tx) =>
+      tx.apiKey.updateMany({
+        where: { id: apiKeyId, brokerId: ctx.brokerId, traderId: ctx.traderId, revokedAt: null },
+        data: { revokedAt: at },
+      }),
+    );
   }
 
   async touch(apiKeyId: string, at: Date): Promise<void> {
