@@ -72,7 +72,7 @@ erDiagram
     timestamptz created_at
   }
   trader_credentials {
-    varchar trader_id PK_FK
+    varchar trader_id PK, FK
     varchar secret_hash "scrypt, never selected by snapshot code"
     timestamptz created_at
     timestamptz rotated_at "nullable"
@@ -111,7 +111,7 @@ erDiagram
     decimal maintenance_margin_usd
   }
   market_prices {
-    varchar symbol PK_FK
+    varchar symbol PK, FK
     decimal mark_price
     timestamptz as_of
   }
