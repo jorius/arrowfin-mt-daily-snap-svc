@@ -24,7 +24,7 @@ the flag inert regardless of its value. That guarantee is in code, not in config
 ## Service configuration
 
 - Railway project "ArrowFin Daily Snapshot"; service `arrowfin-mt-daily-snap-svc` built with
-  Nixpacks from `railway.json`: build `npm ci && npm run build` (which runs
+  Nixpacks from `railway.json`: install `npm ci` (Nixpacks phase), build `npm run build` (which runs
   `prisma generate`), start `npx prisma migrate deploy && npm run start:prod`, health check
   `/health`, restart on failure.
 - Variables per environment: `DATABASE_URL=${{Postgres.DATABASE_URL}}` (private network),
