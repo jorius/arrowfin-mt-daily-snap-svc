@@ -1,0 +1,249 @@
+{
+  "info": {
+    "name": "ArrowFin Trader Daily Snapshot",
+    "description": "Smoke flow for the Trader Daily Snapshot API. Run top to bottom with the Collection Runner: Health, issue an API key (stored in the `apiKey` collection variable), the guarded reads, the tenant-isolation check, the dev-only fill simulator, and finally the key revocation. Set `secret` to the trader's secret before running; it is never stored in this file.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3001", "type": "string" },
+    { "key": "traderId", "value": "T-005", "type": "string" },
+    { "key": "secret", "value": "", "type": "string" },
+    { "key": "accountId", "value": "ACC-1006", "type": "string" },
+    { "key": "foreignAccountId", "value": "ACC-1011", "type": "string" },
+    { "key": "apiKey", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] },
+        "description": "Unauthenticated liveness probe used by the Railway health check."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('status body is ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "Opaque API keys: the trader exchanges an id and a secret for an `afk_` key once; the server stores only its sha256 and the tenant it belongs to.",
+      "item": [
+        {
+          "name": "Issue API key",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"traderId\": \"{{traderId}}\",\n  \"secret\": \"{{secret}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/auth/api/key", "host": ["{{baseUrl}}"], "path": ["auth", "api", "key"] },
+            "description": "Verifies the secret against its scrypt hash and returns a new opaque API key. The `brokerId` in the response is resolved server-side from the trader row, never from the request. On success the key is stored in the `apiKey` collection variable for the following requests."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.test('apiKey is an afk_ opaque key', () => pm.expect(json.apiKey).to.be.a('string').and.to.match(/^afk_/));",
+                  "pm.test('expiresAt is present', () => pm.expect(json.expiresAt).to.be.a('string'));",
+                  "pm.test('principal.traderId matches the request', () => pm.expect(json.principal.traderId).to.eql(pm.collectionVariables.get('traderId')));",
+                  "if (pm.collectionVariables.get('traderId') === 'T-005') {",
+                  "  pm.test('T-005 belongs to BRK-SMPT', () => pm.expect(json.principal.brokerId).to.eql('BRK-SMPT'));",
+                  "}",
+                  "if (json.apiKey) { pm.collectionVariables.set('apiKey', json.apiKey); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Issue API key with wrong secret",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"traderId\": \"{{traderId}}\",\n  \"secret\": \"definitely-not-the-secret\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/auth/api/key", "host": ["{{baseUrl}}"], "path": ["auth", "api", "key"] },
+            "description": "A wrong secret and an unknown trader id both return the same generic 401 after a scrypt comparison, so timing and wording reveal nothing about which trader ids exist."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('no apiKey in the body', () => pm.expect(pm.response.json()).to.not.have.property('apiKey'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Accounts",
+      "description": "Every route is scoped to the authenticated principal. The account id in the path is only a filter inside that scope.",
+      "item": [
+        {
+          "name": "List my accounts",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{apiKey}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/me/accounts", "host": ["{{baseUrl}}"], "path": ["me", "accounts"] },
+            "description": "Accounts owned by the authenticated trader inside their tenant. Balances are not included here; they travel only in the snapshot."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('accounts is an array', () => pm.expect(pm.response.json().accounts).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Snapshot",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{apiKey}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/{{accountId}}/snapshot",
+              "host": ["{{baseUrl}}"],
+              "path": ["accounts", "{{accountId}}", "snapshot"]
+            },
+            "description": "Open positions, day P&L and the risk score for one of the caller's accounts, computed for the Globex session that contains the server's replay clock."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('has positions, pnl and risk', () => {",
+                  "  pm.expect(json.positions).to.be.an('array');",
+                  "  pm.expect(json.pnl).to.be.an('object');",
+                  "  pm.expect(json.risk).to.be.an('object');",
+                  "});",
+                  "pm.test('risk score is between 0 and 100', () => pm.expect(json.risk.score).to.be.within(0, 100));",
+                  "pm.test('risk level is LOW, ELEVATED or HIGH', () => pm.expect(json.risk.level).to.be.oneOf(['LOW', 'ELEVATED', 'HIGH']));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Snapshot of a foreign account",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{apiKey}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/{{foreignAccountId}}/snapshot",
+              "host": ["{{baseUrl}}"],
+              "path": ["accounts", "{{foreignAccountId}}", "snapshot"]
+            },
+            "description": "Tenant isolation check: ACC-1011 belongs to a Meridian trader. A Summit key gets 404, the same answer as for a non-existent id, so the endpoint cannot be used to enumerate other tenants' accounts."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404 (not 403: no existence leak)', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Dev",
+      "description": "Development-only. The module behind this route is registered only when DEV_FILLS_ENABLED=true and NODE_ENV is not production; in production the route does not exist.",
+      "item": [
+        {
+          "name": "Simulate fill",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": \"{{accountId}}\",\n  \"instrument_symbol\": \"MES\",\n  \"side\": \"BUY\",\n  \"quantity\": 1,\n  \"price\": 5643.25,\n  \"commission_usd\": 0.70\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{baseUrl}}/dev/fills", "host": ["{{baseUrl}}"], "path": ["dev", "fills"] },
+            "description": "Inserts a fill for the account (its broker_id is taken from the account row, never from the body) and pushes a `fill` event to that account's WebSocket room only. Expect the widget to refetch and the position to grow by one contract."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('fill echoes the account', () => pm.expect(pm.response.json().fill.accountId).to.eql(pm.collectionVariables.get('accountId')));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth teardown",
+      "description": "Runs last so the key issued at the top of the flow is revoked.",
+      "item": [
+        {
+          "name": "Revoke API key",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{apiKey}}", "type": "string" }] },
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/auth/api/key", "host": ["{{baseUrl}}"], "path": ["auth", "api", "key"] },
+            "description": "Revokes the key that authenticates the call. The next request with it returns 401."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 204', () => pm.response.to.have.status(204));",
+                  "pm.collectionVariables.set('apiKey', '');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
