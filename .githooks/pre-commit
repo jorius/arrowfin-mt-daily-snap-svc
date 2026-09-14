@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+# Refuse to commit production-grade dataset files or environment files.
+# The assessment dataset is treated as real customer data: it is never tracked.
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+blocked=$(printf '%s\n' "$staged" | grep -Ei '(\.csv$|(^|/)dataset/|(^|/)\.env(\.[^/]*)?$)' | grep -Ev '\.env\.example$' || true)
+if [ -n "$blocked" ]; then
+  echo "pre-commit: refusing to commit protected files:" >&2
+  printf '%s\n' "$blocked" | sed 's/^/  /' >&2
+  echo "Dataset CSVs and .env files must never enter the repository." >&2
+  exit 1
+fi

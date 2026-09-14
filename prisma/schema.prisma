@@ -1,0 +1,207 @@
+// Trader Daily Snapshot — data model
+// See docs/superpowers/specs/2026-09-14-trader-daily-snapshot-design.md §3.
+//
+// Tenant key: broker_id. It is denormalized onto accounts, fills and api_keys so
+// every tenant-bearing table can be filtered with a single predicate and composite
+// foreign keys reject rows whose broker_id disagrees with their parent's.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/infrastructure/prisma/generated"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum BrokerType {
+  retail
+  prop
+}
+
+enum KycStatus {
+  verified
+  pending
+  suspended
+}
+
+enum AccountType {
+  funded
+  demo
+  eval
+  pro
+  pro_plus
+}
+
+enum AccountStatus {
+  active
+  restricted
+  closed
+}
+
+enum FillSide {
+  BUY
+  SELL
+}
+
+enum Liquidity {
+  maker
+  taker
+}
+
+/// Tenant. `id` is the tenant key used everywhere else.
+model Broker {
+  id             String     @id @db.VarChar(32)
+  name           String
+  type           BrokerType
+  whiteLabelName String     @map("white_label_name")
+  apiKeyHash     String     @map("api_key_hash")
+  createdAt      DateTime   @map("created_at") @db.Timestamptz(3)
+
+  traders  Trader[]
+  accounts Account[]
+  fills    Fill[]
+  apiKeys  ApiKey[]
+
+  @@map("brokers")
+}
+
+/// Regulated PII. Snapshot code never selects name/contact/notes columns.
+model Trader {
+  id           String    @id @db.VarChar(32)
+  brokerId     String    @map("broker_id") @db.VarChar(32)
+  firstName    String    @map("first_name")
+  lastName     String    @map("last_name")
+  email        String
+  phone        String
+  dob          DateTime  @db.Date
+  ssnLast4     String    @map("ssn_last4") @db.Char(4)
+  addressLine1 String    @map("address_line1")
+  city         String
+  state        String?
+  postalCode   String    @map("postal_code")
+  kycStatus    KycStatus @map("kyc_status")
+  notes        String?
+  auditNotes   String?   @map("audit_notes")
+  createdAt    DateTime  @map("created_at") @db.Timestamptz(3)
+
+  broker     Broker            @relation(fields: [brokerId], references: [id])
+  credential TraderCredential?
+  accounts   Account[]
+  apiKeys    ApiKey[]
+
+  /// Target of the composite FKs from accounts and api_keys.
+  @@unique([id, brokerId])
+  @@index([brokerId])
+  @@map("traders")
+}
+
+/// Kept apart from the PII row: the snapshot path never touches this table.
+model TraderCredential {
+  traderId   String    @id @map("trader_id") @db.VarChar(32)
+  /// Encoded scrypt string: scrypt$N$r$p$<salt b64>$<hash b64>
+  secretHash String    @map("secret_hash")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  rotatedAt  DateTime? @map("rotated_at") @db.Timestamptz(3)
+
+  trader Trader @relation(fields: [traderId], references: [id], onDelete: Cascade)
+
+  @@map("trader_credentials")
+}
+
+/// Opaque bearer keys. Only the sha256 of the key is stored.
+model ApiKey {
+  id         String    @id @default(uuid()) @db.Uuid
+  traderId   String    @map("trader_id") @db.VarChar(32)
+  brokerId   String    @map("broker_id") @db.VarChar(32)
+  keyHash    String    @unique @map("key_hash") @db.Char(64)
+  keyPrefix  String    @map("key_prefix") @db.VarChar(16)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(3)
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  trader Trader @relation(fields: [traderId, brokerId], references: [id, brokerId])
+  broker Broker @relation(fields: [brokerId], references: [id])
+
+  @@index([traderId, brokerId])
+  @@map("api_keys")
+}
+
+model Account {
+  id              String        @id @db.VarChar(32)
+  traderId        String        @map("trader_id") @db.VarChar(32)
+  brokerId        String        @map("broker_id") @db.VarChar(32)
+  accountNumber   String        @unique @map("account_number") @db.VarChar(32)
+  accountType     AccountType   @map("account_type")
+  balance         Decimal       @db.Decimal(18, 2)
+  buyingPower     Decimal       @map("buying_power") @db.Decimal(18, 2)
+  maxPositionSize Int           @map("max_position_size")
+  status          AccountStatus
+  createdAt       DateTime      @map("created_at") @db.Timestamptz(3)
+
+  /// Composite FK: an account cannot claim a broker its trader does not belong to.
+  trader Trader @relation(fields: [traderId, brokerId], references: [id, brokerId])
+  broker Broker @relation(fields: [brokerId], references: [id])
+  fills  Fill[]
+
+  /// Target of the composite FK from fills.
+  @@unique([id, brokerId])
+  @@index([brokerId, traderId])
+  @@map("accounts")
+}
+
+model Instrument {
+  symbol               String  @id @db.VarChar(8)
+  description          String
+  exchange             String  @db.VarChar(8)
+  pointValueUsd        Decimal @map("point_value_usd") @db.Decimal(18, 6)
+  tickSize             Decimal @map("tick_size") @db.Decimal(18, 6)
+  tickValueUsd         Decimal @map("tick_value_usd") @db.Decimal(18, 6)
+  initialMarginUsd     Decimal @map("initial_margin_usd") @db.Decimal(18, 2)
+  maintenanceMarginUsd Decimal @map("maintenance_margin_usd") @db.Decimal(18, 2)
+
+  marketPrice MarketPrice?
+  fills       Fill[]
+
+  @@map("instruments")
+}
+
+/// Latest mark per instrument (the dataset cut). A time series would key on (symbol, as_of).
+model MarketPrice {
+  symbol    String   @id @db.VarChar(8)
+  markPrice Decimal  @map("mark_price") @db.Decimal(18, 6)
+  asOf      DateTime @map("as_of") @db.Timestamptz(3)
+
+  instrument Instrument @relation(fields: [symbol], references: [symbol])
+
+  @@map("market_prices")
+}
+
+model Fill {
+  id               String    @id @db.VarChar(32)
+  accountId        String    @map("account_id") @db.VarChar(32)
+  brokerId         String    @map("broker_id") @db.VarChar(32)
+  instrumentSymbol String    @map("instrument_symbol") @db.VarChar(8)
+  side             FillSide
+  quantity         Int
+  price            Decimal   @db.Decimal(18, 6)
+  filledAt         DateTime  @map("filled_at") @db.Timestamptz(3)
+  orderId          String    @map("order_id") @db.VarChar(32)
+  liquidity        Liquidity
+  commissionUsd    Decimal   @map("commission_usd") @db.Decimal(10, 2)
+
+  /// Composite FK: a fill cannot claim a broker its account does not belong to.
+  account    Account    @relation(fields: [accountId, brokerId], references: [id, brokerId])
+  broker     Broker     @relation(fields: [brokerId], references: [id])
+  instrument Instrument @relation(fields: [instrumentSymbol], references: [symbol])
+
+  /// The snapshot index: tenant-first, then account, then time. A tenant-scoped
+  /// replay of one account's fills range-scans this index and never touches
+  /// another tenant's pages. See design doc §3.2.
+  @@index([brokerId, accountId, filledAt])
+  /// Partial fills share an order_id.
+  @@index([orderId])
+  @@map("fills")
+}
