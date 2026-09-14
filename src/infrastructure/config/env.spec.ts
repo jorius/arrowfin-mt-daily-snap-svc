@@ -18,6 +18,13 @@ describe('loadEnv', () => {
     ).toBe(false);
   });
 
+  it('serves Swagger by default and never in production', () => {
+    expect(loadEnv({ ...base }).SWAGGER_ENABLED).toBe(true);
+    expect(loadEnv({ ...base, SWAGGER_ENABLED: 'false' }).SWAGGER_ENABLED).toBe(false);
+    expect(loadEnv({ ...base, NODE_ENV: 'production' }).SWAGGER_ENABLED).toBe(false);
+    expect(loadEnv({ ...base, NODE_ENV: 'production', SWAGGER_ENABLED: 'true' }).SWAGGER_ENABLED).toBe(false);
+  });
+
   it('fails fast without a database url', () => {
     expect(() => loadEnv({})).toThrow(/DATABASE_URL/);
   });

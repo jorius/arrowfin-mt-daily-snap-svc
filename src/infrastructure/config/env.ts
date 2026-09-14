@@ -28,6 +28,8 @@ export interface Env {
   readonly WS_PING_TIMEOUT_MS: number;
   /** WS_CONNECT_TIMEOUT_MS, default 45000. */
   readonly WS_CONNECT_TIMEOUT_MS: number;
+  /** Serves /docs and /docs-json. Defaults to true; always false in production. */
+  readonly SWAGGER_ENABLED: boolean;
 }
 
 function required(source: NodeJS.ProcessEnv, name: string): string {
@@ -83,5 +85,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     WS_PING_INTERVAL_MS: ws.pingIntervalMs,
     WS_PING_TIMEOUT_MS: ws.pingTimeoutMs,
     WS_CONNECT_TIMEOUT_MS: ws.connectTimeoutMs,
+    SWAGGER_ENABLED: (source.SWAGGER_ENABLED ?? 'true') !== 'false' && nodeEnv !== 'production',
   };
 }
