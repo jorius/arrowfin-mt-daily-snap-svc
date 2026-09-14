@@ -871,7 +871,7 @@ Styling: dark, dense, "trading terminal" — `bg-zinc-900` cards, `border-zinc-8
 ### Task B5: README reconnect answer + SECURITY notes
 
 - Fill the "Reconnect behaviour" section of `README.md` from the actual hook: what is detected, what is refetched, what `lastFillId` allows, and the honest limit (between `disconnect` and the `stale` timer the last numbers are shown with the badge as the only signal; a fill that arrives during the gap is caught by the reconnect refetch, not by the event).
-- Fill the 🤖 parts of `SECURITY.md` with file references.
+- Fill the drafted parts of `SECURITY.md` with file references.
 - Commit — `Document reconnect behaviour and client-side security notes`
 
 ---

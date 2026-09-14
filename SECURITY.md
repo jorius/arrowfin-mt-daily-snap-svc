@@ -4,10 +4,7 @@ Canonical security writeup for the assessment. The frontend repository has a sho
 companion [SECURITY.md](https://github.com/jorius/arrowfin-mt-daily-snap-fe/blob/main/SECURITY.md)
 covering client-side concerns.
 
-Legend: ✍️ written by the candidate · 🤖 drafted from the code with an LLM, reviewed
-by the candidate. Every claim below should point at a file and line.
-
-## 1. Auth model 🤖✍️
+## 1. Auth model
 
 _How does the frontend authenticate to the REST endpoint? How does the WebSocket
 authenticate? What stops a logged-in trader from one tenant from subscribing to
@@ -26,7 +23,7 @@ another tenant's stream?_
 - **Why opaque keys instead of JWT.** _(revocation, no signing-key management, one
   indexed lookup per request; trade-off: a DB hit per request, Redis in production)_
 
-## 2. Tenant isolation 🤖✍️
+## 2. Tenant isolation
 
 _Where in the code is tenant isolation enforced? If someone forgets a
 `WHERE broker_id = ?` six months from now, what catches it?_
@@ -41,7 +38,7 @@ _Where in the code is tenant isolation enforced? If someone forgets a
 6. _(Row-level security, if shipped: policies on `current_setting('app.broker_id')`,
    `FORCE ROW LEVEL SECURITY`, `SET LOCAL` per transaction.)_
 
-## 3. PII handling 🤖✍️
+## 3. PII handling
 
 _What was considered sensitive, what was logged vs. redacted, and what changes if
 the data is stored in the DB vs. flowing through the WebSocket._
@@ -54,7 +51,7 @@ the data is stored in the DB vs. flowing through the WebSocket._
 - **Redacted / never selected:** _
 - **DB vs. socket:** _
 
-## 4. One vulnerability I didn't introduce 🤖✍️
+## 4. One vulnerability I didn't introduce
 
 _Pick a specific class of bug and show the line of code or design choice that
 prevented it._
@@ -63,13 +60,13 @@ prevented it._
   Task 4 PR)
 - The line: _
 
-## 5. What I'd do in production but didn't ✍️
+## 5. What I'd do in production but didn't
 
 _One paragraph. Be specific._
 
 _
 
-## 6. Development-only fill simulator 🤖
+## 6. Development-only fill simulator
 
 _How the `POST /dev/fills` endpoint is guaranteed not to run in production._
 
